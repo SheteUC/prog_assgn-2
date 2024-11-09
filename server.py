@@ -76,6 +76,7 @@ def process_command(data, username, conn):
         }
         with lock:
             public_messages.append(message)
+            # working on this part
         broadcast(f"New message posted by {username}: {subject}\n", exclude_client=None)
         return "Message posted.\n"
     elif command == '%message':
