@@ -15,14 +15,17 @@ public_messages = []
 # Lock for thread safety
 lock = threading.Lock()
 
+# Add this constant at the top with other globals
+GROUP_ACCESS_ERROR = "You are not a member of this group or group does not exist.\n"
+
 def broadcast(message, exclude_client=None):
     with lock:
         for client in clients.values():
             if client != exclude_client:
                 try:
                     client.sendall(message.encode())
-                except:
-                    pass
+                except (ConnectionError, socket.error) as e:
+                    print(f"Connection error: {e}")
 
 def handle_client(conn, addr):
     conn.sendall("Enter a unique username: ".encode())
@@ -51,8 +54,8 @@ def handle_client(conn, addr):
             response = process_command(data, username, conn)
             if response:
                 conn.sendall(response.encode())
-    except:
-        pass
+    except (ConnectionError, socket.error) as e:
+        print(f"Connection error: {e}")
     finally:
         with lock:
             del clients[username]
@@ -63,106 +66,131 @@ def process_command(data, username, conn):
     args = data.strip().split()
     if not args:
         return "Invalid command.\n"
+        
+    command_handlers = {
+        '%post': handle_post,
+        '%message': handle_message,
+        '%users': handle_users,
+        '%exit': handle_exit,
+        '%groups': handle_groups,
+        '%groupjoin': handle_group_join,
+        '%grouppost': handle_group_post,
+        '%groupmessage': handle_group_message,
+        '%groupusers': handle_group_users,
+        '%groupleave': handle_group_leave
+    }
+    
     command = args[0]
-    if command == '%post':
-        subject = args[1]
-        content = ' '.join(args[2:])
-        message = {
-            'id': len(public_messages) + 1,
-            'sender': username,
-            'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'subject': subject,
-            'content': content
-        }
-        with lock:
-            public_messages.append(message)
-            # working on this part
-        broadcast(f"New message posted by {username}: {subject}\n", exclude_client=None)
-        return "Message posted.\n"
-    elif command == '%message':
-        msg_id = int(args[1]) - 1
-        with lock:
-            if 0 <= msg_id < len(public_messages):
-                msg = public_messages[msg_id]
-                return f"Message ID: {msg['id']}\nSender: {msg['sender']}\nDate: {msg['date']}\nSubject: {msg['subject']}\nContent: {msg['content']}\n"
-            else:
-                return "Message not found.\n"
-    elif command == '%users':
-        response = "Current users:\n"
-        with lock:
-            for user in clients.keys():
-                response += f"- {user}\n"
-        return response
-    elif command == '%exit':
-        conn.close()
-        return
-    elif command == '%groups':
-        response = "Available groups:\n"
-        with lock:
-            for idx, group in enumerate(groups.keys(), 1):
-                response += f"{idx}. {group}\n"
-        return response
-    elif command == '%groupjoin':
-        group_name = args[1]
-        with lock:
-            if group_name in groups:
-                groups[group_name]['members'][username] = conn
-                return f"Joined {group_name}.\n"
-            else:
-                return "Group not found.\n"
-    elif command == '%grouppost':
-        group_name = args[1]
-        subject = args[2]
-        content = ' '.join(args[3:])
-        with lock:
-            if group_name in groups and username in groups[group_name]['members']:
-                message = {
-                    'id': len(groups[group_name]['messages']) + 1,
-                    'sender': username,
-                    'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'subject': subject,
-                    'content': content
-                }
-                groups[group_name]['messages'].append(message)
-                # Notify group members
-                for member_conn in groups[group_name]['members'].values():
-                    if member_conn != conn:
-                        member_conn.sendall(f"New message in {group_name} by {username}: {subject}\n".encode())
-                return "Group message posted.\n"
-            else:
-                return "You are not a member of this group or group does not exist.\n"
-    elif command == '%groupmessage':
-        group_name = args[1]
-        msg_id = int(args[2]) - 1
-        with lock:
-            if group_name in groups and username in groups[group_name]['members']:
-                if 0 <= msg_id < len(groups[group_name]['messages']):
-                    msg = groups[group_name]['messages'][msg_id]
-                    return f"Group: {group_name}\nMessage ID: {msg['id']}\nSender: {msg['sender']}\nDate: {msg['date']}\nSubject: {msg['subject']}\nContent: {msg['content']}\n"
-                else:
-                    return "Message not found in group.\n"
-            else:
-                return "You are not a member of this group or group does not exist.\n"
-    elif command == '%groupusers':
-        group_name = args[1]
-        with lock:
-            if group_name in groups and username in groups[group_name]['members']:
-                response = f"Users in {group_name}:\n"
-                for user in groups[group_name]['members'].keys():
-                    response += f"- {user}\n"
-                return response
-            else:
-                return "You are not a member of this group or group does not exist.\n"
-    elif command == '%groupleave':
-        group_name = args[1]
-        with lock:
-            if group_name in groups and username in groups[group_name]['members']:
-                del groups[group_name]['members'][username]
-                return f"Left {group_name}.\n"
-            else:
-                return "You are not a member of this group or group does not exist.\n"
-    else:
+    handler = command_handlers.get(command)
+    if not handler:
         return "Unknown command.\n"
+    
+    return handler(args, username, conn)
+
+def handle_post(args, username, conn):
+    subject = args[1]
+    content = ' '.join(args[2:])
+    message = {
+        'id': len(public_messages) + 1,
+        'sender': username,
+        'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'subject': subject,
+        'content': content
+    }
+    with lock:
+        public_messages.append(message)
+    broadcast(f"New message posted by {username}: {subject}\n", exclude_client=None)
+    return "Message posted.\n"
+
+def handle_message(args, username, conn):
+    msg_id = int(args[1]) - 1
+    with lock:
+        if 0 <= msg_id < len(public_messages):
+            msg = public_messages[msg_id]
+            return f"Message ID: {msg['id']}\nSender: {msg['sender']}\nDate: {msg['date']}\nSubject: {msg['subject']}\nContent: {msg['content']}\n"
+        else:
+            return "Message not found.\n"
+
+def handle_users(args, username, conn):
+    response = "Current users:\n"
+    with lock:
+        for user in clients.keys():
+            response += f"- {user}\n"
+    return response
+
+def handle_exit(args, username, conn):
+    conn.close()
+
+def handle_groups(args, username, conn):
+    response = "Available groups:\n"
+    with lock:
+        for idx, group in enumerate(groups.keys(), 1):
+            response += f"{idx}. {group}\n"
+    return response
+
+def handle_group_join(args, username, conn):
+    group_name = args[1]
+    with lock:
+        if group_name in groups:
+            groups[group_name]['members'][username] = conn
+            return f"Joined {group_name}.\n"
+        else:
+            return "Group not found.\n"
+
+def handle_group_post(args, username, conn):
+    group_name = args[1]
+    subject = args[2]
+    content = ' '.join(args[3:])
+    with lock:
+        if group_name in groups and username in groups[group_name]['members']:
+            message = {
+                'id': len(groups[group_name]['messages']) + 1,
+                'sender': username,
+                'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'subject': subject,
+                'content': content
+            }
+            groups[group_name]['messages'].append(message)
+            # Notify group members
+            for member_conn in groups[group_name]['members'].values():
+                if member_conn != conn:
+                    member_conn.sendall(f"New message in {group_name} by {username}: {subject}\n".encode())
+            return "Group message posted.\n"
+        else:
+            return GROUP_ACCESS_ERROR
+
+def handle_group_message(args, username, conn):
+    group_name = args[1]
+    msg_id = int(args[2]) - 1
+    with lock:
+        if group_name in groups and username in groups[group_name]['members']:
+            if 0 <= msg_id < len(groups[group_name]['messages']):
+                msg = groups[group_name]['messages'][msg_id]
+                return f"Group: {group_name}\nMessage ID: {msg['id']}\nSender: {msg['sender']}\nDate: {msg['date']}\nSubject: {msg['subject']}\nContent: {msg['content']}\n"
+            else:
+                return "Message not found in group.\n"
+        else:
+            return GROUP_ACCESS_ERROR
+
+def handle_group_users(args, username, conn):
+    group_name = args[1]
+    with lock:
+        if group_name in groups and username in groups[group_name]['members']:
+            response = f"Users in {group_name}:\n"
+            for user in groups[group_name]['members'].keys():
+                response += f"- {user}\n"
+            return response
+        else:
+            return GROUP_ACCESS_ERROR
+
+def handle_group_leave(args, username, conn):
+    group_name = args[1]
+    with lock:
+        if group_name in groups and username in groups[group_name]['members']:
+            del groups[group_name]['members'][username]
+            return f"Left {group_name}.\n"
+        else:
+            return GROUP_ACCESS_ERROR
 
 def start_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
