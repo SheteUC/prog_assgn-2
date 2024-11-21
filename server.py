@@ -105,7 +105,8 @@ def process_command(data, username, conn):
         '%groupmessage': handle_group_message,
         '%groupusers': handle_group_users,
         '%groupleave': handle_group_leave,
-        '%exit': handle_exit
+        '%exit': handle_exit,
+        '%join': handle_join
     }
 
     handler = command_handlers.get(args[0])
@@ -259,6 +260,30 @@ def handle_group_leave(args, username, conn):
             return f"Left {group_name}. You are now back on the Public Board.\n"
         else:
             return GROUP_ACCESS_ERROR
+
+def handle_join(args, username, conn):
+    with lock:
+        if username in clients:
+            return f'{username} is already in public board'
+        
+        clients[username] = conn
+        broadcast(f'{username} has joined the public board: ', exclude_client=conn)
+        
+        # Send the last two public messages to the new user
+        response = "Last two messages on the public board:\n"
+        if public_messages:
+            last_messages = public_messages[-2:]
+            for msg in last_messages:
+                response += format_message(msg)
+        else:
+            response += "No messages on the public board yet.\n"
+        
+        # Send the list of current users
+        response += "Current users on the public board:\n"
+        for user in clients.keys():
+            response += f"- {user}\n"
+        
+    return response
 
 def handle_exit(args, username, conn):
     return "EXIT"
