@@ -23,7 +23,7 @@ server_commands_list = {
         '%groupleave',       
         '%exit'
         "%join",
-        "%post", #used inconjuction with [subject][message] to actually post
+        "%post", 
         "%users",
         "%message",
         "%leave",
@@ -73,6 +73,9 @@ def main():
                 sock.connect((address, port))
                 print(f"Connected to {address}:{port}")
                 threading.Thread(target=receive_messages, args=(sock,), daemon=True).start()
+
+                username = input("Enter a username: ")
+                sock.sendall(username.encode())
             except Exception as e:
                 print(f"Unable to connect to the server: {e}")
                 sys.exit()

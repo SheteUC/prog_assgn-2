@@ -15,7 +15,6 @@ public_messages = []
 lock = threading.Lock()
 
 GROUP_ACCESS_ERROR = "You are not a member of this group or the group does not exist.\n"
-USERNAME_PROMPT = "Enter a unique username: "
 
 def broadcast(message, exclude_client=None):
     with lock:
@@ -119,6 +118,7 @@ def process_command(data, username, conn):
         print(f"Error processing command from {username}: {e}")
         return f"Error processing command: {e}\n"
 
+#handles %help (works)
 def handle_help(args, username, conn):
     help_text = """
 Available Commands:
@@ -136,6 +136,7 @@ Available Commands:
 """
     return help_text
 
+#handles %post (looks like it works)
 def handle_post(args, username, conn):
     if len(args) < 3:
         return "Usage: %post [subject] [content]\n"
@@ -153,6 +154,7 @@ def handle_post(args, username, conn):
     broadcast(f"New public message posted by {username}: {subject}\n", exclude_client=None)
     return "Message posted to the public board.\n"
 
+#handles %message
 def handle_message(args, username, conn):
     if len(args) != 2:
         return "Usage: %message [message_id]\n"
@@ -167,6 +169,7 @@ def handle_message(args, username, conn):
         else:
             return "Message not found on the public board.\n"
 
+#handles %users (works)
 def handle_users(args, username, conn):
     response = "Current users on the public board:\n"
     with lock:
@@ -174,6 +177,7 @@ def handle_users(args, username, conn):
             response += f"- {user}\n"
     return response
 
+#handles %groups (works)
 def handle_groups(args, username, conn):
     response = "Available groups:\n"
     with lock:
@@ -181,6 +185,7 @@ def handle_groups(args, username, conn):
             response += f"{idx}. {group}\n"
     return response
 
+#handles %groupjoin (works)
 def handle_group_join(args, username, conn):
     if len(args) != 2:
         return "Usage: %groupjoin [group_name]\n"
@@ -192,6 +197,7 @@ def handle_group_join(args, username, conn):
         else:
             return "Group not found.\n"
 
+#handles %grouppost (works)
 def handle_group_post(args, username, conn):
     if len(args) < 4:
         return "Usage: %grouppost [group_name] [subject] [content]\n"
@@ -219,6 +225,7 @@ def handle_group_post(args, username, conn):
         else:
             return GROUP_ACCESS_ERROR
 
+#handles %groupmessage (works)
 def handle_group_message(args, username, conn):
     if len(args) != 3:
         return "Usage: %groupmessage [group_name] [message_id]\n"
@@ -237,6 +244,7 @@ def handle_group_message(args, username, conn):
         else:
             return GROUP_ACCESS_ERROR
 
+#handles %groupusers (works)
 def handle_group_users(args, username, conn):
     if len(args) != 2:
         return "Usage: %groupusers [group_name]\n"
@@ -249,7 +257,8 @@ def handle_group_users(args, username, conn):
             return response
         else:
             return GROUP_ACCESS_ERROR
-
+ 
+#handles %groupleave (sorta works)
 def handle_group_leave(args, username, conn):
     if len(args) != 2:
         return "Usage: %groupleave [group_name]\n"
@@ -261,6 +270,7 @@ def handle_group_leave(args, username, conn):
         else:
             return GROUP_ACCESS_ERROR
 
+#handles %join (this does not work yet)
 def handle_join(args, username, conn):
     with lock:
         if username in clients:
