@@ -14,6 +14,3 @@
    2. Run the client_gui.py if wanting to use the gui
       ```bash
       python client_gui.py
-
-
-   
