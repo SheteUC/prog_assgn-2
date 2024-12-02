@@ -8,7 +8,8 @@
 
    ```bash
    python3 server.py
-4. 1. Run the client.py if wanting to run on terminal
+4. In another terminal:
+   1. Run the client.py if wanting to run on terminal
       ```bash
       python3 client.py
    2. Run the client_gui.py if wanting to use the gui
