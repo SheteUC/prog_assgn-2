@@ -272,27 +272,31 @@ def handle_group_leave(args, username, conn):
 
 #handles %join (this does not work yet)
 def handle_join(args, username, conn):
+    if len(args) != 2: #actually raging bro this block of code works but when handle_join's response passes through
+        # while True:
+        #   conn.sendall(f"\n[{current_location}]> ".encode())
+        #   data = conn.recv(4096).decode()
+        #   if not data:
+        #     break
+        # it breaks because data turns out to be empty, i am unabke to figure out why this is happening lowkey
+        return "Usage: %join [username]\n"
+    join_username = args[1]
+
     with lock:
-        if username in clients:
-            return f'{username} is already in public board'
-        
-        clients[username] = conn
-        broadcast(f'{username} has joined the public board: ', exclude_client=conn)
-        
-        # Send the last two public messages to the new user
+        if join_username in clients:
+            return f"{join_username} is already in the public board.\n"   =
+        clients[join_username] = conn  
+        broadcast(f"{join_username} has joined the public board.\n", exclude_client=conn)
         response = "Last two messages on the public board:\n"
         if public_messages:
             last_messages = public_messages[-2:]
             for msg in last_messages:
-                response += format_message(msg)
+                response += f"{format_message(msg)}\n"
         else:
-            response += "No messages on the public board yet.\n"
-        
-        # Send the list of current users
-        response += "Current users on the public board:\n"
+            response += "No messages on the public board yet.\n"  
+        response += "\nCurrent users on the public board:\n"
         for user in clients.keys():
-            response += f"- {user}\n"
-        
+            response += f"- {user}\n"      
     return response
 
 def handle_exit(args, username, conn):
