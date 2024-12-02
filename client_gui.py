@@ -1,86 +1,125 @@
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import messagebox
 import socket
 import threading
 
+SERVER_HOST = "127.0.0.1"  # Replace with the actual server IP
+SERVER_PORT = 12345        # Replace with the actual server port
+BUFFER_SIZE = 4096
 
 class ClientGUI:
-    def __init__(self, master):
-        self.master = master
-        self.master.title("Bulletin Board Client")
-        self.master.geometry("600x400")
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Bulletin Board Client")
+        self.root.geometry("500x600")
+        self.root.configure(bg="#f0f0f0")
 
-        # Username and connection setup
-        self.username = None
-        self.client_socket = None
-        self.server_address = ("127.0.0.1", 12345)
+        # Fonts and Colors
+        self.font = ("Helvetica", 12)
+        self.bg_color = "#f0f0f0"
+        self.text_color = "#333333"
+        self.button_color = "#4CAF50"
+        self.button_text_color = "#ffffff"
 
-        # GUI Layout
-        self.chat_display = scrolledtext.ScrolledText(self.master, state="disabled", wrap="word", height=20, width=70)
-        self.chat_display.grid(row=0, column=0, padx=10, pady=10, columnspan=2)
+        # Menu Bar (Optional)
+        menu_bar = tk.Menu(self.root)
+        self.root.config(menu=menu_bar)
+        file_menu = tk.Menu(menu_bar, tearoff=0)
+        menu_bar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Exit", command=self.close_connection)
 
-        self.input_field = tk.Entry(self.master, width=55)
-        self.input_field.grid(row=1, column=0, padx=10, pady=10)
+        # Chat Area Frame
+        chat_frame = tk.Frame(self.root, bg=self.bg_color)
+        chat_frame.pack(fill='both', expand=True, padx=10, pady=5)
+
+        # Chat Area with Scrollbar
+        self.chat_area = tk.Text(chat_frame, state='disabled', wrap='word', font=self.font, bg="#ffffff", fg=self.text_color)
+        self.chat_area.pack(side='left', fill='both', expand=True)
+
+        scrollbar = tk.Scrollbar(chat_frame, command=self.chat_area.yview)
+        scrollbar.pack(side='right', fill='y')
+        self.chat_area['yscrollcommand'] = scrollbar.set
+
+        # Input Area Frame
+        input_frame = tk.Frame(self.root, bg=self.bg_color)
+        input_frame.pack(fill='x', padx=10, pady=5)
+
+        self.input_field = tk.Entry(input_frame, width=40, font=self.font)
+        self.input_field.pack(side='left', fill='x', expand=True, padx=(0, 5))
         self.input_field.bind("<Return>", self.send_message)
 
-        self.send_button = tk.Button(self.master, text="Send", command=self.send_message)
-        self.send_button.grid(row=1, column=1, padx=10, pady=10)
+        self.send_button = tk.Button(input_frame, text="Send", command=self.send_message,
+                                     bg=self.button_color, fg=self.button_text_color, font=self.font)
+        self.send_button.pack(side='left')
 
-        # Prompt user for username at the start
-        self.prompt_username()
+        # Status Bar Frame
+        status_frame = tk.Frame(self.root, bg=self.bg_color)
+        status_frame.pack(fill='x', padx=10, pady=5)
+
+        self.exit_button = tk.Button(status_frame, text="Exit", command=self.close_connection,
+                                     bg="#f44336", fg=self.button_text_color, font=self.font)
+        self.exit_button.pack(side='right')
+
+        # Client Socket
+        self.client_socket = None
+        self.running = True
+
+        self.setup_connection()
+        self.listen_thread = threading.Thread(target=self.receive_messages, daemon=True)
+        self.listen_thread.start()
+
+    def setup_connection(self):
+        """Set up the connection to the server."""
+        try:
+            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.client_socket.connect((SERVER_HOST, SERVER_PORT))
+            self.update_chat("Connected to the server.")
+            self.prompt_username()
+        except Exception as e:
+            messagebox.showerror("Connection Error", f"Failed to connect to the server:\n{e}")
+            self.running = False
+            self.root.destroy()
 
     def prompt_username(self):
         """Prompt the user to enter a username."""
-        self.username_window = tk.Toplevel(self.master)
-        self.username_window.title("Set Username")
+        self.username_window = tk.Toplevel(self.root)
+        self.username_window.title("Enter Username")
         self.username_window.geometry("300x100")
         self.username_window.resizable(False, False)
 
-        tk.Label(self.username_window, text="Enter Username:").pack(pady=5)
-        self.username_entry = tk.Entry(self.username_window)
-        self.username_entry.pack(pady=5)
-        self.username_entry.bind("<Return>", self.set_username)
+        tk.Label(self.username_window, text="Enter a unique username:", font=self.font).pack(pady=10)
+        self.username_entry = tk.Entry(self.username_window, font=self.font)
+        self.username_entry.pack()
+        self.username_entry.bind("<Return>", self.submit_username)
 
-        tk.Button(self.username_window, text="Submit", command=self.set_username).pack(pady=5)
+        submit_button = tk.Button(self.username_window, text="Join", command=self.submit_username,
+                                  bg=self.button_color, fg=self.button_text_color, font=self.font)
+        submit_button.pack(pady=5)
 
-    def set_username(self, event=None):
-        """Set the username entered by the user."""
+    def submit_username(self, event=None):
+        """Send the username to the server."""
         username = self.username_entry.get().strip()
         if username:
-            self.username = username
-            self.username_window.destroy()
-            self.connect_to_server()
+            join_command = f"%join {username}"
+            try:
+                self.client_socket.sendall(join_command.encode())
+                self.username_window.destroy()
+            except Exception as e:
+                self.update_chat(f"Error: {e}")
+                self.username_window.destroy()
         else:
-            self.update_chat("Username cannot be empty!")
+            messagebox.showwarning("Invalid Username", "Username cannot be empty.")
 
-    def connect_to_server(self):
-        """Connect to the server and send the initial username."""
-        try:
-            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.connect(self.server_address)
-            self.client_socket.sendall(self.username.encode())
-            threading.Thread(target=self.receive_messages, daemon=True).start()
-            self.update_chat(f"Connected to the server as {self.username}.")
-        except Exception as e:
-            self.update_chat(f"Error connecting to the server: {e}")
+    def update_chat(self, message):
+        """Update the chat area with a new message."""
+        self.chat_area.config(state='normal')
+        self.chat_area.insert('end', message + '\n')
+        self.chat_area.config(state='disabled')
+        self.chat_area.see('end')
 
     def send_message(self, event=None):
         """Send a message to the server."""
-        if not self.username:
-            self.update_chat("Please set a username before sending messages.")
-            return
-
         message = self.input_field.get().strip()
-        if message.startswith("%join"):
-            # Special handling for %join command
-            parts = message.split()
-            if len(parts) == 2 and parts[1] == self.username:
-                self.update_chat("You are already part of the public board.")
-                return
-            elif len(parts) == 1:
-                self.update_chat("Usage: %join [username]")
-                return
-
         if message:
             try:
                 self.client_socket.sendall(message.encode())
@@ -89,28 +128,39 @@ class ClientGUI:
             except Exception as e:
                 self.update_chat(f"Error: {e}")
         else:
-            self.update_chat("Cannot send an empty message.")
+            messagebox.showwarning("Empty Message", "Cannot send an empty message.")
 
     def receive_messages(self):
         """Receive messages from the server."""
-        while True:
+        while self.running:
             try:
-                message = self.client_socket.recv(1024).decode()
+                message = self.client_socket.recv(BUFFER_SIZE).decode()
                 if message:
                     self.update_chat(message)
+                else:
+                    self.update_chat("Server disconnected.")
+                    self.running = False
             except Exception as e:
-                self.update_chat(f"Error receiving message: {e}")
+                if self.running:
+                    self.update_chat(f"Error receiving message: {e}")
                 break
 
-    def update_chat(self, message):
-        """Update the chat display with a new message."""
-        self.chat_display.configure(state="normal")
-        self.chat_display.insert("end", message + "\n")
-        self.chat_display.configure(state="disabled")
-        self.chat_display.see("end")
+    def close_connection(self):
+        """Close the connection and exit the application."""
+        self.running = False
+        if self.client_socket:
+            try:
+                self.client_socket.sendall("%exit".encode())
+                self.client_socket.close()
+            except Exception:
+                pass
+        self.root.quit()
 
+    def run(self):
+        """Run the Tkinter main loop."""
+        self.root.protocol("WM_DELETE_WINDOW", self.close_connection)
+        self.root.mainloop()
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    gui = ClientGUI(root)
-    root.mainloop()
+    client = ClientGUI()
+    client.run()
