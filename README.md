@@ -39,4 +39,3 @@
 - **%groupusers [group_name]**: List users in a group.
 - **%groupleave [group_name]**: Leave a group.
 - **%exit**: Exit the application.
-```
